@@ -42,7 +42,6 @@ export interface ASTNumber {
 
 export interface ASTFunctionCall {
     type: ASTNodeType.Function;
-    arity: number;
     def: ASTFunctionDef;
 }
 
@@ -68,24 +67,34 @@ export interface NAryFunction {
     interpret: (operands: number[]) => number;
 }
 
-export type ASTFunctionDef = UnaryFunction | BinaryFunction | NAryFunction
+export type ASTFunctionDef
+    = UnaryFunction
+    | BinaryFunction
+    // | NAryFunction soon...
 
 export type AST
     = ASTNumber
     | ASTFunctionCall
     ;
 
+export enum OperatorType {
+    Unary,
+    Binary
+}
 
 interface OperatorBase {
+    type: OperatorType;
     op: string;
     precedence: number;
 }
 
 export interface UnaryOperator extends OperatorBase {
+    type: OperatorType.Unary;
     interpret: (operand: number) => number;
 }
 
 export interface BinaryOperator extends OperatorBase {
+    type: OperatorType.Binary;
     interpret: (left: number, right: number) => number;
 }
 
@@ -94,10 +103,14 @@ export interface NAryOperator extends OperatorBase {
     interpret: (operands: number[]) => number;
 }
 
-export type Operator = UnaryOperator | BinaryOperator | NAryOperator
+export type Operator
+    = BinaryOperator
+    | UnaryOperator
+    // | NAryOperator to be added with functions
 
 export interface Builtins {
-    prefix: (operator: UnaryOperator) => Builtins;
-    infix: (operator: BinaryOperator) => Builtins;
-    define: (fn: NAryOperator) => Builtins;
+    infix: (op: string, precedence: number, interpret: (left: number, right: number) => number) => Builtins;
+    prefix: (op: string, precedence: number, interpret: (arg: number) => number) => Builtins;
+
+    find: (op: string) => Operator | undefined;
 }

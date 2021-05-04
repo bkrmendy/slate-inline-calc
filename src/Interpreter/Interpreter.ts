@@ -1,4 +1,4 @@
-import { AST, ASTNodeType, Builtins, ASTFunctionDef, Token, Arity, Operator, TokenType } from "./Types";
+import { AST, ASTNodeType, Builtins, ASTFunctionDef, Token, Arity, Operator, TokenType, OperatorType, TokenOpenParen, TokenCloseParen, TokenOperator, ASTFunctionCall } from "./Types";
 import { assertNever, err, ok, Result, ResultType } from "../Utils";
 
 const isString = (a: string) => (b: string) => a === b;
@@ -64,10 +64,31 @@ const tokenize = (source: string): Result<string, Token[]> => {
     return ok(tokens);
 }
 
+/*
 
-const parse = (tokens: Token[]): Result<string, AST[]> => {
+const operatorOnTopHasBiggerPrecedence = (the operator at the top of the operator stack has greater precedence) or (the operator at the top of the operator stack has equal precedence and the token is left associative)
+
+while ((there is an operator at the top of the operator stack)
+        && operatorOnTopHasBiggerPrecedence
+        && (the operator at the top of the operator stack is not a left parenthesis)):
+            pop operators from the operator stack onto the output queue.
+*/
+
+const operator_to_ast = (op: Operator): ASTFunctionCall => {
+    switch (op.type) {
+        case OperatorType.Unary:
+            return { type: ASTNodeType.Function, def: { arity: 1, interpret: op.interpret } };
+        case OperatorType.Binary:
+            return { type: ASTNodeType.Function, def: { arity: 2, interpret: op.interpret } };
+        default:
+            assertNever(op);
+    }
+    throw new Error("Should not get here because of exhaustiveness check");
+}
+
+const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
     let output = new Array<AST>();
-    let operator_q = new Array<Token>();
+    let operator_q = new Array<TokenOpenParen | TokenOperator>();
 
     // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
     while (tokens.length > 0) {
@@ -75,22 +96,51 @@ const parse = (tokens: Token[]): Result<string, AST[]> => {
         if (token === undefined) { throw new Error("Should not get here beacuse of loop condition") }
         if (token.type === TokenType.Number) {
             output.push({ type: ASTNodeType.Number, value: token.value });
-        } if (token.type === TokenType.OpenParen) {
+        } else if (token.type === TokenType.Operator) {
+            while (
+                operator_q.length > 0
+                && operator_q[operator_q.length - 1].type !== TokenType.OpenParen
+                && (operator_q[operator_q.length - 1].)
+            ) {
+
+            }
+
+            operator_q.push(token);
+        } else if (token.type === TokenType.OpenParen) {
             operator_q.push(token);
         } else if (token.type === TokenType.CloseParen) {
+            if (operator_q.length < 1) {
+                continue;
+            }
             let top = operator_q[operator_q.length - 1];
             while (top.type !== TokenType.OpenParen) {
                 const t = operator_q.pop();
                 if (t === undefined) { return err("Mismatched parens!") };
                 if (t.type === TokenType.Operator) {
-                    output.push({ type: ASTNodeType.Function, })
+                    const op = builtins.find(t.operator);
+                    if (op === undefined) { return err("Operator not defined!") }
+                    output.push(operator_to_ast(op));
                 }
                 top = operator_q[operator_q.length - 1];
             }
-
-        }
-        else {
+            if (operator_q.length > 0 && top.type === TokenType.OpenParen) {
+                operator_q.pop();
+            }
+        } else {
             assertNever(token);
+        }
+    }
+
+    while (operator_q.length > 0) {
+        const o = operator_q.pop();
+        if (o === undefined) { throw new Error("Should not get here beacuse of loop condition") }
+        if (o.type === TokenType.OpenParen) { return err("Mismatched parens!"); }
+        else if (o.type === TokenType.Operator) {
+            const op = builtins.find(o.operator);
+            if (op === undefined) { return err("Operator not defined!") }
+            output.push(operator_to_ast(op));
+        } else {
+            assertNever(o);
         }
     }
 
@@ -146,7 +196,7 @@ const interpret = (builtins: Builtins, source: string): Result<string, number> =
         return err(tokens.error);
     }
 
-    const ast = parse(tokens.value);
+    const ast = parse(builtins, tokens.value);
     if (ast.type === ResultType.Error) {
         return err("Cannot parse!");
     }
@@ -159,14 +209,27 @@ const interpret = (builtins: Builtins, source: string): Result<string, number> =
 export class BuiltinsImpl implements Builtins {
     defines: Operator[] = []
 
-    private add = (op: Operator): Builtins => {
-        this.defines.push(op);
+    infix = (op: string, precedence: number, interpret: (left: number, right: number) => number): Builtins => {
+        this.defines.push({
+            type: OperatorType.Binary,
+            precedence,
+            op,
+            interpret
+        });
         return this;
     }
 
-    prefix = this.add;
-    infix = this.add;
-    define = this.add;
+    prefix = (op: string, precedence: number, interpret: (arg: number) => number): Builtins => {
+        this.defines.push({
+            type: OperatorType.Unary,
+            precedence,
+            op,
+            interpret
+        });
+        return this;
+    }
+
+    find = (op: string): Operator | undefined => this.defines.find(def => def.op === op);
 }
 
 export class Interpreter {

@@ -8,41 +8,12 @@ import { assertNever, ResultType } from "./Utils"
 const createInterpreter = (): Interpreter =>
   Interpreter
     .withBuiltins(bs =>
-      bs.infix({
-        op: "+",
-        precedence: 4,
-        interpret: (left, right) => left + right
-      }).infix({
-        op: "*",
-        precedence: 4,
-        interpret: (left, right) => left * right
-      }).infix({
-        op: "-",
-        precedence: 4,
-        interpret: (left, right) => left - right
-      }).infix({
-        op: "/",
-        precedence: 4,
-        interpret: (left, right) => left / right
-      }).infix({
-        op: "^",
-        precedence: 4,
-        interpret: (left: number, right: number) => Math.pow(left, right)
-      }).prefix({
-        op: "sqrt",
-        precedence: 5,
-        interpret: (operand) => Math.sqrt(operand)
-      }).define({
-        op: "max",
-        nArgs: 2,
-        precedence: 6,
-        interpret: (ops) => Math.max(...ops)
-      }).define({
-        op: "min",
-        nArgs: 2,
-        precedence: 6,
-        interpret: (ops) => Math.max(...ops)
-      })
+      bs
+        .infix("+", 4, (left, right) => left + right)
+        .infix("*", 4, (left, right) => left * right)
+        .infix("-", 4, (left, right) => left - right)
+        .infix("/", 4, (left, right) => left / right)
+        .infix("^", 4, (left: number, right: number) => Math.pow(left, right))
   );
 
 const Calculator = () => {

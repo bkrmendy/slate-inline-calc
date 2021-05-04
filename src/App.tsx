@@ -1,13 +1,12 @@
-import { Interpreter } from "./Interpreter"
+import { Interpreter } from "./Interpreter/Interpreter"
 
 import React, { useState, useMemo } from 'react'
 import { createEditor, Descendant, Editor, Range } from 'slate'
 import { Slate, Editable, withReact, useSlate, ReactEditor } from 'slate-react'
 import { assertNever, ResultType } from "./Utils"
 
-const createInterpreter = (): Interpreter => {
-  const sum = (xs: number[]) => xs.reduce((acc, val) => acc + val, 0);
-  return Interpreter
+const createInterpreter = (): Interpreter =>
+  Interpreter
     .withBuiltins(bs =>
       bs.infix({
         op: "+",
@@ -25,25 +24,26 @@ const createInterpreter = (): Interpreter => {
         op: "/",
         precedence: 4,
         interpret: (left, right) => left / right
+      }).infix({
+        op: "^",
+        precedence: 4,
+        interpret: (left: number, right: number) => Math.pow(left, right)
       }).prefix({
         op: "sqrt",
         precedence: 5,
         interpret: (operand) => Math.sqrt(operand)
       }).define({
-        op: "maximum",
+        op: "max",
+        nArgs: 2,
         precedence: 6,
         interpret: (ops) => Math.max(...ops)
       }).define({
-        op: "sum",
+        op: "min",
+        nArgs: 2,
         precedence: 6,
-        interpret: sum
-      }).define({
-        op: "avg",
-        precedence: 6,
-        interpret: (xs) => sum(xs) / xs.length
+        interpret: (ops) => Math.max(...ops)
       })
-    )
-}
+  );
 
 const Calculator = () => {
   const interpreter = useMemo(() => createInterpreter(), []);

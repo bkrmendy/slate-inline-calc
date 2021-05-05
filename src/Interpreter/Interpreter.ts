@@ -97,14 +97,21 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
         if (token.type === TokenType.Number) {
             output.push({ type: ASTNodeType.Number, value: token.value });
         } else if (token.type === TokenType.Operator) {
-            while (
-                operator_q.length > 0
-                && operator_q[operator_q.length - 1].type !== TokenType.OpenParen
-                && (operator_q[operator_q.length - 1].)
-            ) {
-
+            const tokenOp = builtins.find(token.operator);
+            if (tokenOp === undefined) { return err("Operator not defined!"); }
+            while (operator_q.length > 0) {
+                const top = operator_q[operator_q.length - 1];
+                if (top.type === TokenType.OpenParen) {
+                    break;
+                }
+                const op = builtins.find(top.operator);
+                if (op === undefined) { return err("Operator not defined!"); }
+                if (op.precedence >= tokenOp.precedence) {
+                    output.push(operator_to_ast(op));
+                } else {
+                    break;
+                }
             }
-
             operator_q.push(token);
         } else if (token.type === TokenType.OpenParen) {
             operator_q.push(token);
@@ -151,15 +158,13 @@ const evalFunction = (stack: Array<number>, operator: ASTFunctionDef): { nextSta
     switch (operator.arity) {
         case Arity.Unary:
             const arg = stack.shift();
-            if (arg === undefined) { throw new Error("Should return result") }
+            if (arg === undefined) { throw new Error("Should return result") };
             return { nextStack: stack, result: operator.interpret(arg) };
         case Arity.Binary:
             const left = stack.shift();
             const right = stack.shift();
-            if (left === undefined || right === undefined) { throw new Error("Should return result") }
-            return { nextStack: stack, result: operator.interpret(left, right) }
-        case Arity.NAry:
-            throw new Error("Should return result")
+            if (left === undefined || right === undefined) { throw new Error("Should return result") };
+            return { nextStack: stack, result: operator.interpret(left, right) };
         default:
             assertNever(operator);
     }
@@ -167,13 +172,11 @@ const evalFunction = (stack: Array<number>, operator: ASTFunctionDef): { nextSta
 }
 
 // https://stackoverflow.com/a/40329913
-const evaluate = (ast: AST[]): number => {
+const evaluate = (ast: AST[]): Result<string, number> => {
     let stack = new Array<number>();
     while (ast.length > 0) {
         const node = ast.shift();
-        if (node === undefined) {
-            throw new Error("Should not get here because of loop condition");
-        }
+        if (node === undefined) { throw new Error("Should not get here because of loop condition"); }
         switch (node.type) {
             case ASTNodeType.Number:
                 stack.unshift(node.value);
@@ -187,7 +190,7 @@ const evaluate = (ast: AST[]): number => {
                 assertNever(node);
         }
     }
-    return stack[0];
+    return ok(stack[0]);
 };
 
 const interpret = (builtins: Builtins, source: string): Result<string, number> => {
@@ -198,12 +201,10 @@ const interpret = (builtins: Builtins, source: string): Result<string, number> =
 
     const ast = parse(builtins, tokens.value);
     if (ast.type === ResultType.Error) {
-        return err("Cannot parse!");
+        return err(ast.error);
     }
 
-    const result = evaluate(ast.value);
-
-    return ok(result);
+    return evaluate(ast.value);
 }
 
 export class BuiltinsImpl implements Builtins {

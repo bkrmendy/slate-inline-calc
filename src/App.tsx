@@ -11,9 +11,9 @@ const createInterpreter = (): Interpreter =>
       bs
         .infix("+", 4, (left, right) => left + right)
         .infix("*", 4, (left, right) => left * right)
-        .infix("-", 4, (left, right) => left - right)
-        .infix("/", 4, (left, right) => left / right)
-        .infix("^", 4, (left: number, right: number) => Math.pow(left, right))
+        .infix("-", 3, (left, right) => left - right)
+        .infix("/", 3, (left, right) => left / right)
+        .infix("^", 5, (left: number, right: number) => Math.pow(left, right))
   );
 
 const Calculator = () => {

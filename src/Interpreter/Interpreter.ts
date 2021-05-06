@@ -14,17 +14,17 @@ const toNumber = (literal: string) => parseInt(literal, 10);
 const isOperatorChar = (c: string) => {
     const isLowerCaseLetter = "a".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "z".charCodeAt(0);
     const isUpperCaseLetter = "A".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "Z".charCodeAt(0);
-    const isMathSymbol = isOneOf(["%", "*", "+", "-", "^"])(c);
+    const isMathSymbol = isOneOf(["%", "*", "+", "-", "^", "/"])(c);
     return (isLowerCaseLetter || isUpperCaseLetter || isMathSymbol);
 }
 
 // parse number from indexes [from, to)
 const parseNumber = (from: number, source: string): { to: number, value: number } => {
-    let literal = source[from];
-    let to = from + 1;
-    if (to < source.length && isDigit(source[to])) {
+    let to = from;
+    while (to < source.length && isDigit(source[to])) {
         to += 1;
     }
+    const literal = source.slice(from, to);
     return { to, value: toNumber(literal) };
 }
 
@@ -78,63 +78,66 @@ const operator_to_ast = (op: Operator): ASTFunctionCall => {
 
 const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
     let output = new Array<AST>();
-    let operator_q = new Array<TokenOpenParen | TokenOperator>();
+    let operatorStack = new Array<TokenOpenParen | TokenOperator>();
 
     // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
     while (tokens.length > 0) {
-        const token = tokens.pop();
+        const token = tokens.shift();
         if (token === undefined) { throw new Error("Should not get here beacuse of loop condition") }
+        
         if (token.type === TokenType.Number) {
             output.push({ type: ASTNodeType.Number, value: token.value });
         } else if (token.type === TokenType.Operator) {
-            const tokenOp = builtins.find(token.operator);
-            if (tokenOp === undefined) { return err(`Operator not defined: "${token.operator}"`); }
-            while (operator_q.length > 0) {
-                const top = operator_q[operator_q.length - 1];
-                if (top.type === TokenType.OpenParen) {
-                    break;
-                }
-                const op = builtins.find(top.operator);
-                if (op === undefined) { return err(`Operator not defined: "${top.operator}"`); }
-                if (op.precedence >= tokenOp.precedence) {
-                    output.push(operator_to_ast(op));
-                } else {
-                    break;
+            const opFromNextToken = builtins.find(token.operator);
+            if (opFromNextToken === undefined) { return err(`Operator not defined: "${token.operator}"`); }
+        
+            let popping = true;
+        
+            while (popping && operatorStack.length > 0) {
+                const topOfOperatorStack = operatorStack[operatorStack.length - 1]
+        
+                if (topOfOperatorStack.type === TokenType.OpenParen) {
+                    popping = false;
+                } else if (topOfOperatorStack.type === TokenType.Operator) {
+                    const opFromTopOfOperatorStack = builtins.find(topOfOperatorStack.operator);
+                    if (opFromTopOfOperatorStack === undefined) { return err(`Operator not defined: "${topOfOperatorStack.operator}"`); }
+                    if (opFromTopOfOperatorStack.precedence >= opFromNextToken.precedence) {
+                        operatorStack.pop();
+                        output.push(operator_to_ast(opFromTopOfOperatorStack));
+                    } else {
+                        popping = false;
+                    }
                 }
             }
-            operator_q.push(token);
+            operatorStack.push(token);
         } else if (token.type === TokenType.OpenParen) {
-            operator_q.push(token);
+            operatorStack.push(token);
         } else if (token.type === TokenType.CloseParen) {
-            if (operator_q.length < 1) {
-                continue;
-            }
-            let top = operator_q[operator_q.length - 1];
-            while (top.type !== TokenType.OpenParen) {
-                const t = operator_q.pop();
-                if (t === undefined) { return err("Mismatched parens!") };
-                if (t.type === TokenType.Operator) {
-                    const op = builtins.find(t.operator);
+            let popping = true;
+            while (popping && operatorStack.length > 0) {
+                const top = operatorStack.pop();
+                if (top === undefined) { return err("Mismatched parens!") };
+                if (top.type === TokenType.OpenParen) {
+                    /* discard the top */
+                    popping = false;
+                } else if (top.type === TokenType.Operator) {
+                    const op = builtins.find(top.operator);
                     if (op === undefined) { return err("Operator not defined!") }
                     output.push(operator_to_ast(op));
                 }
-                top = operator_q[operator_q.length - 1];
-            }
-            if (operator_q.length > 0 && top.type === TokenType.OpenParen) {
-                operator_q.pop();
             }
         } else {
             assertNever(token);
         }
     }
 
-    while (operator_q.length > 0) {
-        const o = operator_q.pop();
+    while (operatorStack.length > 0) {
+        const o = operatorStack.pop();
         if (o === undefined) { throw new Error("Should not get here beacuse of loop condition") }
-        if (o.type === TokenType.OpenParen) { return err("Mismatched parens!"); }
+        if (o.type === TokenType.OpenParen) { return err("Mismatched parens!") }
         else if (o.type === TokenType.Operator) {
             const op = builtins.find(o.operator);
-            if (op === undefined) { return err("Operator not defined!") }
+            if (op === undefined) { return err(`Operator not defined: "${o.operator}"`); }
             output.push(operator_to_ast(op));
         } else {
             assertNever(o);
@@ -144,17 +147,17 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
     return ok(output);
 }
 
-const evalFunction = (stack: Array<number>, operator: ASTFunctionDef): { nextStack: Array<number>, result: number } => {
+const evalFunction = (stack: Array<number>, operator: ASTFunctionDef): Result<string, { nextStack: Array<number>, result: number }> => {
     switch (operator.arity) {
         case Arity.Unary:
-            const arg = stack.shift();
-            if (arg === undefined) { throw new Error("Should return result") };
-            return { nextStack: stack, result: operator.interpret(arg) };
+            const arg = stack.pop();
+            if (arg === undefined) { return err("Stack underflow!"); }
+            return ok({ nextStack: stack, result: operator.interpret(arg) });
         case Arity.Binary:
-            const left = stack.shift();
-            const right = stack.shift();
-            if (left === undefined || right === undefined) { throw new Error("Should return result") };
-            return { nextStack: stack, result: operator.interpret(left, right) };
+            const right = stack.pop();
+            const left = stack.pop();
+            if (left === undefined || right === undefined) { return err("Stack underflow!"); }
+            return ok({ nextStack: stack, result: operator.interpret(left, right) });
         default:
             assertNever(operator);
     }
@@ -169,12 +172,16 @@ const evaluate = (ast: AST[]): Result<string, number> => {
         if (node === undefined) { throw new Error("Should not get here because of loop condition"); }
         switch (node.type) {
             case ASTNodeType.Number:
-                stack.unshift(node.value);
+                stack.push(node.value);
                 break;
             case ASTNodeType.Function:
-                const { nextStack, result } = evalFunction(stack, node.def);
+                const res = evalFunction(stack, node.def);
+                if (res.type === ResultType.Error) {
+                    return res;
+                }
+                const { nextStack, result } = res.value;
                 stack = nextStack;
-                stack.unshift(result);
+                stack.push(result);
                 break
             default:
                 assertNever(node);

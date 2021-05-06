@@ -14,7 +14,7 @@ const toNumber = (literal: string) => parseInt(literal, 10);
 const isOperatorChar = (c: string) => {
     const isLowerCaseLetter = "a".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "z".charCodeAt(0);
     const isUpperCaseLetter = "A".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "Z".charCodeAt(0);
-    const isMathSymbol = isOneOf(["%", "*", "+", "-", "^",]);
+    const isMathSymbol = isOneOf(["%", "*", "+", "-", "^"])(c);
     return (isLowerCaseLetter || isUpperCaseLetter || isMathSymbol);
 }
 
@@ -64,22 +64,12 @@ const tokenize = (source: string): Result<string, Token[]> => {
     return ok(tokens);
 }
 
-/*
-
-const operatorOnTopHasBiggerPrecedence = (the operator at the top of the operator stack has greater precedence) or (the operator at the top of the operator stack has equal precedence and the token is left associative)
-
-while ((there is an operator at the top of the operator stack)
-        && operatorOnTopHasBiggerPrecedence
-        && (the operator at the top of the operator stack is not a left parenthesis)):
-            pop operators from the operator stack onto the output queue.
-*/
-
 const operator_to_ast = (op: Operator): ASTFunctionCall => {
     switch (op.type) {
         case OperatorType.Unary:
-            return { type: ASTNodeType.Function, def: { arity: 1, interpret: op.interpret } };
+            return { type: ASTNodeType.Function, def: { arity: Arity.Unary, interpret: op.interpret } };
         case OperatorType.Binary:
-            return { type: ASTNodeType.Function, def: { arity: 2, interpret: op.interpret } };
+            return { type: ASTNodeType.Function, def: { arity: Arity.Binary, interpret: op.interpret } };
         default:
             assertNever(op);
     }
@@ -98,14 +88,14 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
             output.push({ type: ASTNodeType.Number, value: token.value });
         } else if (token.type === TokenType.Operator) {
             const tokenOp = builtins.find(token.operator);
-            if (tokenOp === undefined) { return err("Operator not defined!"); }
+            if (tokenOp === undefined) { return err(`Operator not defined: "${token.operator}"`); }
             while (operator_q.length > 0) {
                 const top = operator_q[operator_q.length - 1];
                 if (top.type === TokenType.OpenParen) {
                     break;
                 }
                 const op = builtins.find(top.operator);
-                if (op === undefined) { return err("Operator not defined!"); }
+                if (op === undefined) { return err(`Operator not defined: "${top.operator}"`); }
                 if (op.precedence >= tokenOp.precedence) {
                     output.push(operator_to_ast(op));
                 } else {

@@ -40,7 +40,6 @@ export default App;
 
 ## Todos
 
+[ ] Support decimal numbers ("God made the integers; all else is the work of man.")
 [ ] Support functions
-[ ] Support unary operators
-[ ] Support postfix / prefix operators
 [ ] Support associativity of operators

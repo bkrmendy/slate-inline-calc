@@ -17,12 +17,10 @@ import { assertNever, err, ok, Result, ResultType } from "../Utils";
 
 const operator_to_ast = (op: Operator): ASTFunctionCall => {
     switch (op.type) {
-        case OperatorType.Unary:
-            return { type: ASTNodeType.Function, def: { arity: Arity.Unary, interpret: op.interpret } };
         case OperatorType.Binary:
             return { type: ASTNodeType.Function, def: { arity: Arity.Binary, interpret: op.interpret } };
         default:
-            assertNever(op);
+            assertNever(op.type);
     }
     throw new Error("Should not get here because of exhaustiveness check");
 }
@@ -39,7 +37,7 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
         if (token.type === TokenType.Number) {
             output.push({ type: ASTNodeType.Number, value: token.value });
         } else if (token.type === TokenType.Operator) {
-            const opFromNextToken = builtins.find(token.operator);
+            const opFromNextToken = builtins.definition(token.operator);
             if (opFromNextToken === undefined) { return err(`Operator not defined: "${token.operator}"`); }
         
             let popping = true;
@@ -50,7 +48,7 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
                 if (topOfOperatorStack.type === TokenType.OpenParen) {
                     popping = false;
                 } else if (topOfOperatorStack.type === TokenType.Operator) {
-                    const opFromTopOfOperatorStack = builtins.find(topOfOperatorStack.operator);
+                    const opFromTopOfOperatorStack = builtins.definition(topOfOperatorStack.operator);
                     if (opFromTopOfOperatorStack === undefined) { return err(`Operator not defined: "${topOfOperatorStack.operator}"`); }
                     if (opFromTopOfOperatorStack.precedence >= opFromNextToken.precedence) {
                         operatorStack.pop();
@@ -72,7 +70,7 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
                     /* discard the top */
                     popping = false;
                 } else if (top.type === TokenType.Operator) {
-                    const op = builtins.find(top.operator);
+                    const op = builtins.definition(top.operator);
                     if (op === undefined) { return err("Operator not defined!") }
                     output.push(operator_to_ast(op));
                 }
@@ -87,7 +85,7 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
         if (o === undefined) { throw new Error("Should not get here beacuse of loop condition") }
         if (o.type === TokenType.OpenParen) { return err("Mismatched parens!") }
         else if (o.type === TokenType.Operator) {
-            const op = builtins.find(o.operator);
+            const op = builtins.definition(o.operator);
             if (op === undefined) { return err(`Operator not defined: "${o.operator}"`); }
             output.push(operator_to_ast(op));
         } else {
@@ -100,17 +98,13 @@ const parse = (builtins: Builtins, tokens: Token[]): Result<string, AST[]> => {
 
 const evalFunction = (stack: Array<number>, operator: ASTFunctionDef): Result<string, { nextStack: Array<number>, result: number }> => {
     switch (operator.arity) {
-        case Arity.Unary:
-            const arg = stack.pop();
-            if (arg === undefined) { return err("Stack underflow!"); }
-            return ok({ nextStack: stack, result: operator.interpret(arg) });
         case Arity.Binary:
             const right = stack.pop();
             const left = stack.pop();
             if (left === undefined || right === undefined) { return err("Stack underflow!"); }
             return ok({ nextStack: stack, result: operator.interpret(left, right) });
         default:
-            assertNever(operator);
+            assertNever(operator.arity);
     }
     throw new Error("fahk yu eslint");
 }
@@ -168,17 +162,7 @@ export class BuiltinsImpl implements Builtins {
         return this;
     }
 
-    prefix = (op: string, precedence: number, interpret: (arg: number) => number): Builtins => {
-        this.defines.push({
-            type: OperatorType.Unary,
-            precedence,
-            op,
-            interpret
-        });
-        return this;
-    }
-
-    find = (op: string): Operator | undefined => this.defines.find(def => def.op === op);
+    definition = (op: string): Operator | undefined => this.defines.find(def => def.op === op);
 }
 
 export class Interpreter {

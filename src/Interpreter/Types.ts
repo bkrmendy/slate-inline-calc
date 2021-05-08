@@ -46,14 +46,8 @@ export interface ASTFunctionCall {
 }
 
 export enum Arity {
-    Unary,
     Binary,
     NAry
-}
-
-export interface UnaryFunction {
-    arity: Arity.Unary
-    interpret: (operand: number) => number;
 }
 
 export interface BinaryFunction {
@@ -68,9 +62,8 @@ export interface NAryFunction {
 }
 
 export type ASTFunctionDef
-    = UnaryFunction
-    | BinaryFunction
-    // | NAryFunction soon...
+    = BinaryFunction
+// | NAryFunction soon...
 
 export type AST
     = ASTNumber
@@ -78,7 +71,6 @@ export type AST
     ;
 
 export enum OperatorType {
-    Unary,
     Binary
 }
 
@@ -86,11 +78,6 @@ interface OperatorBase {
     type: OperatorType;
     op: string;
     precedence: number;
-}
-
-export interface UnaryOperator extends OperatorBase {
-    type: OperatorType.Unary;
-    interpret: (operand: number) => number;
 }
 
 export interface BinaryOperator extends OperatorBase {
@@ -105,12 +92,10 @@ export interface NAryOperator extends OperatorBase {
 
 export type Operator
     = BinaryOperator
-    | UnaryOperator
-    // | NAryOperator to be added with functions
+// | NAryOperator to be added with functions
 
 export interface Builtins {
     infix: (op: string, precedence: number, interpret: (left: number, right: number) => number) => Builtins;
-    prefix: (op: string, precedence: number, interpret: (arg: number) => number) => Builtins;
 
-    find: (op: string) => Operator | undefined;
+    definition: (op: string) => Operator | undefined;
 }

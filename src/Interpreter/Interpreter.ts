@@ -1,68 +1,19 @@
-import { AST, ASTNodeType, Builtins, ASTFunctionDef, Token, Arity, Operator, TokenType, OperatorType, TokenOpenParen, TokenCloseParen, TokenOperator, ASTFunctionCall } from "./Types";
+import { tokenize } from "./Tokenize"
+import {
+    Arity,
+    AST,
+    ASTNodeType,
+    ASTFunctionCall,
+    ASTFunctionDef,
+    Builtins,
+    Token,
+    TokenType,
+    TokenOpenParen,
+    TokenOperator,
+    Operator,
+    OperatorType,
+} from "./Types";
 import { assertNever, err, ok, Result, ResultType } from "../Utils";
-
-const isString = (a: string) => (b: string) => a === b;
-const isOneOf = (elems: string[]) => (e: string) => elems.includes(e);
-const isDigit = isOneOf(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]);
-const isWhiteSpace = isOneOf([" ", "\t", "\n", ","]); // comma is whitespace for practical purposes
-
-const isOpenParen = isString("(");
-const isCloseParen = isString(")");
-
-const toNumber = (literal: string) => parseInt(literal, 10);
-
-const isOperatorChar = (c: string) => {
-    const isLowerCaseLetter = "a".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "z".charCodeAt(0);
-    const isUpperCaseLetter = "A".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "Z".charCodeAt(0);
-    const isMathSymbol = isOneOf(["%", "*", "+", "-", "^", "/"])(c);
-    return (isLowerCaseLetter || isUpperCaseLetter || isMathSymbol);
-}
-
-// parse number from indexes [from, to)
-const parseNumber = (from: number, source: string): { to: number, value: number } => {
-    let to = from;
-    while (to < source.length && isDigit(source[to])) {
-        to += 1;
-    }
-    const literal = source.slice(from, to);
-    return { to, value: toNumber(literal) };
-}
-
-const parseOperator = (from: number, source: string): { to: number, value: string } => {
-    let to = from + 1;
-    while (to < source.length && isOperatorChar(source[to])) {
-        to += 1;
-    }
-    return { to, value: source.slice(from, to) };
-}
-
-const tokenize = (source: string): Result<string, Token[]> => {
-    let tokens: Token[] = []
-    let currentIndex = 0;
-    while (currentIndex < source.length) {
-        const lookAhead = source[currentIndex];
-        if (isDigit(lookAhead)) {
-            const { to, value } = parseNumber(currentIndex, source);
-            tokens.push({ type: TokenType.Number, value });
-            currentIndex = to;
-        } else if (isOperatorChar(lookAhead)) {
-            const { to, value } = parseOperator(currentIndex, source);
-            tokens.push({ type: TokenType.Operator, operator: value });
-            currentIndex = to;
-        } else if (isOpenParen(lookAhead)) {
-            tokens.push({ type: TokenType.OpenParen });
-            currentIndex += 1;
-        } else if (isCloseParen(lookAhead)) {
-            tokens.push({ type: TokenType.CloseParen });
-            currentIndex += 1;
-        } else if (isWhiteSpace(lookAhead)) {
-            currentIndex += 1;
-        } else {
-            return err(`Unexpected character: ${lookAhead}`);
-        }
-    }
-    return ok(tokens);
-}
 
 const operator_to_ast = (op: Operator): ASTFunctionCall => {
     switch (op.type) {

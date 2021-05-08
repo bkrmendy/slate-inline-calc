@@ -25,7 +25,7 @@ export const Calculator = (props: CalculatorProps) => {
         const result = interpreter.interpret(selectedText);
         switch (result.type) {
             case ResultType.OK:
-                return <pre>{result.value} = {selectedText}</pre>;
+                return <pre>{result.value.toFixed(5)} = {selectedText}</pre>;
             case ResultType.Error:
                 return <pre>Error: {result.error}</pre>;
             default:

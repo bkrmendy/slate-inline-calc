@@ -1,3 +1,4 @@
+import assert from "assert";
 import { err, ok, Result, ResultType } from "../Utils";
 import { Token, TokenType } from "./Types";
 
@@ -19,27 +20,61 @@ const isFunctionChar = (c: string) => {
     return isLowerCaseLetter || isUpperCaseLetter;
 }
 
-// parse number from indexes [from, to)
-const parseNumber = (from: number, source: string): Result<null, { to: number, value: number }> => {
-    /*
-        TODO
-        Grammar for number:
-        ('-'|'+')?<digit+>(.)?<digit+>
-        -123.312
-    */
+const signFn = (sign: '+' | '-') => (n: number) => sign === '-' ? -n : n;
 
+// parse number from indexes [from, to)
+export const parseNumber = (from: number, source: string): Result<string, { to: number, value: number }> => {
+    assert(!isWhiteSpace(source[from]));
+
+    // 1. parse optional leading +/-
+    let sign = signFn('+');
+    const maybeSignChar = source[from];
+    if (maybeSignChar === '+' || maybeSignChar === '-') {
+        sign = signFn(maybeSignChar);
+        from += 1;
+    } else {
+        /* No sign char present */
+    }
+
+    // 2. parse whole part of number
     let to = from;
     while (to < source.length && isDigit(source[to])) {
         to += 1;
     }
+
     if (to === from) {
-        return err(null);
+        return err("No digit after sign");
     }
-    const literal = source.slice(from, to);
-    return ok({ to, value: toNumber(literal) });
+
+    let wholePart = source.slice(from, to);
+
+    from = to;
+
+    // 3. parse optional decimal point
+    if (source[from] !== '.') { 
+        const number = toNumber(wholePart);
+        return ok({ to, value: sign(number) });    
+    } else {
+        /* skip over decimal point if present */
+        to += 1;
+    }
+
+    from = to;
+
+    // 4. parse fractional part of number
+    while (to < source.length && isDigit(source[to])) {
+        to += 1;
+    }
+    if (to === from) {
+        return err(`Character is not a digit: ${source[from]}`);
+    }
+    const fractionalPart = source.slice(from, to);
+    const number = parseFloat(`${wholePart}.${fractionalPart}`);
+    return ok({ to, value: sign(number) });
 }
 
 const parseOperator = (from: number, source: string): Result<null, { to: number, value: string }> => {
+    assert(!isWhiteSpace(source[from]));
     let to = from;
     while (to < source.length && isOperatorChar(source[to])) {
         to += 1;
@@ -51,6 +86,7 @@ const parseOperator = (from: number, source: string): Result<null, { to: number,
 }
 
 const parseParen = (from: number, source: string): Result<null, { to: number, token: Token }> => {
+    assert(!isWhiteSpace(source[from]));
     if (isOpenParen(source[from])) {
         return ok({ to: from + 1, token: { type: TokenType.OpenParen } });
     }
@@ -61,7 +97,8 @@ const parseParen = (from: number, source: string): Result<null, { to: number, to
 }
 
 const parseToken = (from: number, source: string): Result<string, { to: number, token: Token }> => {
-    while (isWhiteSpace(source[from])) {
+    assert(from < source.length);
+    while (from < source.length && isWhiteSpace(source[from])) {
         from += 1;
     }
 
@@ -93,6 +130,8 @@ export const tokenize = (source: string): Result<string, Token[]> => {
         if (maybeNextToken.type === ResultType.OK) {
             currentIndex = maybeNextToken.value.to;
             tokens.push(maybeNextToken.value.token);
+        } else {
+            return err(maybeNextToken.error);
         }
     }
     return ok(tokens);

@@ -5,13 +5,11 @@ import { ResultType } from "./Utils";
 const testParseOK = (literal: string, expectedValue: number) => {
     const result = parseNumber(0, literal);
     if (result.type === ResultType.OK) {
-        expect(result.value.value).toEqual(expectedValue);
+        expect(result.value.token.value).toEqual(expectedValue);
     } else {
         throw new Error(`Cannot parse ${literal}, reason: ${result.error}`);
     }
 }
-
-
 
 // Tests that should return ok
 

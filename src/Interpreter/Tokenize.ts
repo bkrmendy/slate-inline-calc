@@ -1,6 +1,6 @@
 import assert from "assert";
 import { err, ok, Result, ResultType } from "../Utils";
-import { Token, TokenType } from "./Types";
+import { Token, TokenCloseParen, TokenComma, TokenNumber, TokenOpenParen, TokenInfixOperator, TokenType, TokenFunction } from "./Types";
 
 const isString = (a: string) => (b: string) => a === b;
 const isOneOf = (elems: string[]) => (e: string) => elems.includes(e);
@@ -9,6 +9,7 @@ const isWhiteSpace = isOneOf([" ", "\t", "\n", ","]); // comma is whitespace for
 
 const isOpenParen = isString("(");
 const isCloseParen = isString(")");
+const isComma = isString(",");
 
 const toNumber = (literal: string) => parseFloat(literal);
 
@@ -16,14 +17,15 @@ const isOperatorChar = isOneOf(["%", "*", "+", "-", "^", "/"]);
 
 const isFunctionChar = (c: string) => {
     const isLowerCaseLetter = "a".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "z".charCodeAt(0);
-    const isUpperCaseLetter = "A".charCodeAt(0) <= c.charCodeAt(0) && c.charCodeAt(0) <= "Z".charCodeAt(0);
-    return isLowerCaseLetter || isUpperCaseLetter;
+    return isLowerCaseLetter;
 }
 
 const signFn = (sign: '+' | '-') => (n: number) => sign === '-' ? -n : n;
 
+type ParsedToken<T extends Token> = { to: number, token: T }
+
 // parse number from indexes [from, to)
-export const parseNumber = (from: number, source: string): Result<string, { to: number, value: number }> => {
+export const parseNumber = (from: number, source: string): Result<string, ParsedToken<TokenNumber>> => {
     assert(!isWhiteSpace(source[from]));
 
     // 1. parse optional leading +/-
@@ -51,9 +53,9 @@ export const parseNumber = (from: number, source: string): Result<string, { to: 
     from = to;
 
     // 3. parse optional decimal point
-    if (source[from] !== '.') { 
+    if (source[from] !== '.') {
         const number = toNumber(wholePart);
-        return ok({ to, value: sign(number) });    
+        return ok({ to, token: { type: TokenType.Number, value: sign(number) } });
     } else {
         /* skip over decimal point if present */
         to += 1;
@@ -70,10 +72,10 @@ export const parseNumber = (from: number, source: string): Result<string, { to: 
     }
     const fractionalPart = source.slice(from, to);
     const number = parseFloat(`${wholePart}.${fractionalPart}`);
-    return ok({ to, value: sign(number) });
+    return ok({ to, token: { type: TokenType.Number, value: sign(number) } });
 }
 
-const parseOperator = (from: number, source: string): Result<null, { to: number, value: string }> => {
+const parseInfixOperator = (from: number, source: string): Result<null, ParsedToken<TokenInfixOperator>> => {
     assert(!isWhiteSpace(source[from]));
     let to = from;
     while (to < source.length && isOperatorChar(source[to])) {
@@ -82,10 +84,24 @@ const parseOperator = (from: number, source: string): Result<null, { to: number,
     if (to === from) {
         return err(null);
     }
-    return ok({ to, value: source.slice(from, to) });
+    return ok({ to, token: { type: TokenType.InfixOperator, operator: source.slice(from, to) } });
 }
 
-const parseParen = (from: number, source: string): Result<null, { to: number, token: Token }> => {
+const parseFunctionName = (from: number, source: string): Result<null, ParsedToken<TokenFunction>> => {
+    assert(!isWhiteSpace(source[from]));
+    let to = from;
+    while (to < source.length && isFunctionChar(source[to])) {
+        to += 1;
+    }
+
+    if (from === to) {
+        return err(null);
+    }
+
+    return ok({ to, token: { type: TokenType.Function, name: source.slice(from, to) } });
+}
+
+const parseParen = (from: number, source: string): Result<null, ParsedToken<TokenOpenParen | TokenCloseParen>> => {
     assert(!isWhiteSpace(source[from]));
     if (isOpenParen(source[from])) {
         return ok({ to: from + 1, token: { type: TokenType.OpenParen } });
@@ -96,7 +112,21 @@ const parseParen = (from: number, source: string): Result<null, { to: number, to
     return err(null);
 }
 
-const parseToken = (from: number, source: string): Result<string, { to: number, token: Token }> => {
+const parseComma = (from: number, source: string): Result<null, ParsedToken<TokenComma>> => {
+    assert(!isWhiteSpace(source[from]));
+    if (isComma(source[from])) {
+        return ok({ to: from + 1, token: { type: TokenType.Comma } })
+    }
+    return err(null);
+
+}
+
+const accept = <T extends Token>(t: ParsedToken<T>): Result<string, ParsedToken<T>> => {
+    const { to, token } = t;
+    return ok({ to, token });
+}
+
+const parseToken = (from: number, source: string): Result<string, ParsedToken<Token>> => {
     assert(from < source.length);
     while (from < source.length && isWhiteSpace(source[from])) {
         from += 1;
@@ -104,19 +134,27 @@ const parseToken = (from: number, source: string): Result<string, { to: number, 
 
     const maybeNumber = parseNumber(from, source);
     if (maybeNumber.type === ResultType.OK) {
-        const token: Token = { type: TokenType.Number, value: maybeNumber.value.value };
-        return ok({ to: maybeNumber.value.to, token });
+        return accept(maybeNumber.value);
     }
 
-    const maybeOperator = parseOperator(from, source);
+    const maybeOperator = parseInfixOperator(from, source);
     if (maybeOperator.type === ResultType.OK) {
-        const token: Token = { type: TokenType.Operator, operator: maybeOperator.value.value };
-        return ok({ to: maybeOperator.value.to, token });
+        return accept(maybeOperator.value);
+    }
+
+    const maybeFunctionName = parseFunctionName(from, source);
+    if (maybeFunctionName.type === ResultType.OK) {
+        return accept(maybeFunctionName.value);
     }
 
     const maybeParen = parseParen(from, source);
     if (maybeParen.type === ResultType.OK) {
-        return ok({ to: maybeParen.value.to, token: maybeParen.value.token });
+        return accept(maybeParen.value);
+    }
+
+    const maybeComma = parseComma(from, source);
+    if (maybeComma.type === ResultType.OK) {
+        return accept(maybeComma.value);
     }
 
     return err(`Unexpected character: ${source[from]}`);

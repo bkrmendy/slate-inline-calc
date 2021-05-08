@@ -1,8 +1,10 @@
 export enum TokenType {
     Number,
+    InfixOperator,
+    Function,
     OpenParen,
     CloseParen,
-    Operator
+    Comma,
 };
 
 export interface TokenNumber {
@@ -18,16 +20,27 @@ export interface TokenCloseParen {
     type: TokenType.CloseParen;
 }
 
-export interface TokenOperator {
-    type: TokenType.Operator;
+export interface TokenComma {
+    type: TokenType.Comma;
+}
+
+export interface TokenInfixOperator {
+    type: TokenType.InfixOperator;
     operator: string;
+}
+
+export interface TokenFunction {
+    type: TokenType.Function;
+    name: string;
 }
 
 export type Token
     = TokenNumber
+    | TokenInfixOperator
+    | TokenFunction
     | TokenOpenParen
     | TokenCloseParen
-    | TokenOperator
+    | TokenComma
     ;
 
 export enum ASTNodeType {
@@ -63,7 +76,8 @@ export interface NAryFunction {
 
 export type ASTFunctionDef
     = BinaryFunction
-// | NAryFunction soon...
+    | NAryFunction
+    ;
 
 export type AST
     = ASTNumber
@@ -71,31 +85,35 @@ export type AST
     ;
 
 export enum OperatorType {
-    Binary
+    Binary,
+    NAry
 }
 
-interface OperatorBase {
+interface DefineBase {
     type: OperatorType;
     op: string;
     precedence: number;
 }
 
-export interface BinaryOperator extends OperatorBase {
+export interface DefineBinaryOperator extends DefineBase {
     type: OperatorType.Binary;
     interpret: (left: number, right: number) => number;
 }
 
-export interface NAryOperator extends OperatorBase {
+export interface DefineFunction extends DefineBase {
+    type: OperatorType.NAry;
     nArgs: number;
     interpret: (operands: number[]) => number;
 }
 
-export type Operator
-    = BinaryOperator
-// | NAryOperator to be added with functions
+export type Define
+    = DefineBinaryOperator
+    | DefineFunction
+    ;
 
 export interface Builtins {
     infix: (op: string, precedence: number, interpret: (left: number, right: number) => number) => Builtins;
+    define: (name: string, arity: number, interpret: (args: number[]) => number) => Builtins;
 
-    definition: (op: string) => Operator | undefined;
+    definition: (op: string) => Define | undefined;
 }

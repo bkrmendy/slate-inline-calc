@@ -40,6 +40,6 @@ export default App;
 
 ## Todos
 
-[x] Support decimal numbers ("God made the integers; all else is the work of man.")
-[x] Support functions
-[ ] Support associativity of operators
+- [x] Support decimal numbers ("God made the integers; all else is the work of man.")
+- [x] Support functions
+- [ ] Support defining the associativity of operators

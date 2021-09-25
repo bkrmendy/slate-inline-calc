@@ -43,3 +43,4 @@ export default App;
 - [x] Support decimal numbers ("God made the integers; all else is the work of man.")
 - [x] Support functions
 - [ ] Support defining the associativity of operators
+- [ ] implement pratt parsing instead of shunting yard
